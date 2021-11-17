@@ -10,28 +10,43 @@ int main(int argc, char *argv[]);
 int main(int argc, char *argv[]) {
   char **listargs;
   char inputstring[65536];
+  char *cwd = getcwd(NULL,0);
+  char user[256];
+  char computer[256];
+
+  getlogin_r(user,sizeof(user));
+  gethostname(computer,sizeof(computer));
 
   while (1) {
+	printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
     fgets(inputstring,65536,stdin);
     char *newline = strchr(inputstring,'\n');
     while(newline != NULL) {
       *newline = ';';
       newline = strchr(newline+1,'\n');
     }
-    printf("Input: \"%s\"\n",inputstring);
+    // printf("Input: \"%s\"\n",inputstring);
     newline = inputstring;
     while(newline != NULL) {
       char *semicolon;
       semicolon = strsep(&newline,";");
       listargs = parse_args(semicolon);
-      if (fork()) {
-	int childstatus;
-	wait(&childstatus);
+	  if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0],"cd")) {
+		chdir(listargs[1]);
+		free(cwd);
+		cwd = getcwd(NULL,0);
+	  } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
+		exit(0);
+	  } else if (fork()) {
+		int childstatus;
+		wait(&childstatus);
       } else {
         execvp(listargs[0],listargs);
       }
+	  free(listargs);
     }
- }
+  }
+  free(cwd);
   return 0;
 }
 
