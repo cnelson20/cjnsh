@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
 	  line = newline + 1; 
     }
     
-	printf("'%s'\n",inputstring);
+	//printf("'%s'\n",inputstring);
     line = inputstring;
     while(line != NULL) {
       char *semicolon;
