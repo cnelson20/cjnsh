@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <pwd.h>
 #define MIN(a,b) (a != NULL ? (a < b ? a : b) : b) 
 
 /* function definitions */
@@ -26,12 +27,12 @@ int main() {
   char **listargs;
   char inputstring[65536];
   char *cwd = getcwd(NULL,0);
-  //homedir = getpwuid(getuid())->pw_dir;
-  homedir = malloc(10);
-  homedir = "Hello!";
-  replace_string("Hello! World",homedir,"Goodbye");
-
-  exit(0);
+  if ((homedir = getenv("HOME")) == NULL) {
+	homedir = getpwuid(getuid())->pw_dir;
+  }
+  char *tmp = replace_string(cwd,homedir,"~");
+  free(cwd);
+  cwd = tmp;
   
   getlogin_r(user,sizeof(user));
   gethostname(computer,sizeof(computer));
@@ -61,31 +62,46 @@ int main() {
       line = newline + 1; 
     }
     
-    //printf("'%s'\n",inputstring);
     line = inputstring;
     while(line != NULL) {
       char *semicolon;
       semicolon = strsep(&line,";");
       listargs = parse_args(semicolon);
       if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0],"cd")) {
-	chdir(listargs[1]);
-	free(cwd);
-	cwd = getcwd(NULL,0);
+		chdir(listargs[1]);
+		free(cwd);
+		cwd = getcwd(NULL,0);
+		char *tmp = replace_string(cwd,homedir,"~");
+		free(cwd);
+		cwd = tmp;
       } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
-	exit(0);
+		exit(0);
       } else if (fork()) {
-	int childstatus;
-	wait(&childstatus);
+		int childstatus;
+		wait(&childstatus);
       } else {
-	execvp(listargs[0],listargs);
+		execvp(listargs[0],listargs);
       }
-      free(listargs);
+	  int i = 0;
+	  while (listargs[i]) {
+		free(listargs[i]);
+		i++;
+	  }
+	  free(listargs);
+		
     }
   }
+  
+  /* free extraneous variables, cleanup */
   free(cwd);
   return 0;
 }
 
+/* 
+  Parses a line of text into a 2d array of arguments (seperates by spaces)
+  returns a pointer to an array of strings, with the last element followed by NULL
+  Each element should be passed into free()
+*/
 char **parse_args(char *line) {
   char *strend = strchr(line,'\0');
   char *strtemp = line;
@@ -161,7 +177,7 @@ int inquotes(char *string, char *ptinstring) {
   return qlvl;
 }
 char *replace_string(char *haystack, char *needle, char *toreplace) {
-  printf("'%s' '%s' '%s'\n",haystack,needle,toreplace);
+  //printf("'%s' '%s' '%s'\n",haystack,needle,toreplace);
   char *tmpchr, *tmpndl, *lpchr;
   tmpchr = haystack;
   while (*tmpchr) {
@@ -189,12 +205,12 @@ char *replace_string(char *haystack, char *needle, char *toreplace) {
   int sizehalf1, sizehalf2, sizenew;
   sizehalf1 = tmpchr - haystack;
   sizehalf2 = strlen(haystack) - (tmpchr - haystack) - strlen(needle);
-  half2 = malloc(sizehalf2);
-  memcpy(half2,tmpchr+strlen(needle),sizehalf2);
-  sizenew = sizehalf1 + strlen(toreplace) + sizehalf2;
-  printf("half2: '%s'\n",half2);
-  printf("sizehalf1: %d sizehalf2: %d sizenew: %d\n",sizehalf1,sizehalf2,sizenew);
-  new = malloc(sizenew);
+  sizenew = sizehalf1 + sizehalf2 + strlen(toreplace);
+  //printf("sizehalf1: %d sizehalf2: %d sizenew: %d\n",sizehalf1,sizehalf2,sizenew);
+  new = malloc(sizenew+1);
   memcpy(new,haystack,sizehalf1);
+  memcpy(new,toreplace,strlen(toreplace));
+  memcpy(new+sizehalf1+strlen(toreplace),tmpchr+strlen(needle),sizehalf2);
+  //printf("'%s'\n",new);
   return new;
 }
