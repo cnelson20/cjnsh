@@ -8,18 +8,31 @@
 /* function definitions */
 char **parse_args(char *line);
 int inquotes(char *string, char *ptinstring);
-int main(int argc, char *argv[]);
+char *replace_string(char *haystack, char *needle, char *toreplace);
+int main();
 
 /* global variables */
 char user[256];
 char computer[256];
-;
-int main(int argc, char *argv[]) {
+char *homedir;
+
+/* 
+   main
+   runs a loop of waiting for input, then executing necessary functions 
+   returns 0;
+*/
+int main() {
 	
   char **listargs;
   char inputstring[65536];
   char *cwd = getcwd(NULL,0);
+  //homedir = getpwuid(getuid())->pw_dir;
+  homedir = malloc(10);
+  homedir = "Hello!";
+  replace_string("Hello! World",homedir,"Goodbye");
 
+  exit(0);
+  
   getlogin_r(user,sizeof(user));
   gethostname(computer,sizeof(computer));
 
@@ -27,46 +40,46 @@ int main(int argc, char *argv[]) {
     printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
     fgets(inputstring,65536,stdin);
 	
-	char *line = inputstring;
+    char *line = inputstring;
     while(1) {
-	  char *newline = strchr(line,'\n');
-	  if (newline == NULL) {break;}
+      char *newline = strchr(line,'\n');
+      if (newline == NULL) {break;}
 	  
-	  while (newline != NULL && inquotes(line,newline)) {
-		newline = strchr(newline+1,'\n');  
-	  }
-	  if (newline == NULL) {
-		fgets(inputstring + strlen(inputstring),65536 - strlen(inputstring),stdin);
-		newline = line;
-	    continue;
-	  }
-	  //printf("'%s'\n",inputstring);
-	  //char *test = inputstring;
-	  //while (*test) {printf("%hhx-%d ",*test,inquotes(line,test));test++;}
-	  *newline = ';';
+      while (newline != NULL && inquotes(line,newline)) {
+	newline = strchr(newline+1,'\n');  
+      }
+      if (newline == NULL) {
+	fgets(inputstring + strlen(inputstring),65536 - strlen(inputstring),stdin);
+	newline = line;
+	continue;
+      }
+      //printf("'%s'\n",inputstring);
+      //char *test = inputstring;
+      //while (*test) {printf("%hhx-%d ",*test,inquotes(line,test));test++;}
+      *newline = ';';
 	  
-	  line = newline + 1; 
+      line = newline + 1; 
     }
     
-	//printf("'%s'\n",inputstring);
+    //printf("'%s'\n",inputstring);
     line = inputstring;
     while(line != NULL) {
       char *semicolon;
       semicolon = strsep(&line,";");
       listargs = parse_args(semicolon);
-	  if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0],"cd")) {
-		chdir(listargs[1]);
-		free(cwd);
-		cwd = getcwd(NULL,0);
-	  } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
-		exit(0);
-	  } else if (fork()) {
-		int childstatus;
-		wait(&childstatus);
+      if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0],"cd")) {
+	chdir(listargs[1]);
+	free(cwd);
+	cwd = getcwd(NULL,0);
+      } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
+	exit(0);
+      } else if (fork()) {
+	int childstatus;
+	wait(&childstatus);
       } else {
-        execvp(listargs[0],listargs);
+	execvp(listargs[0],listargs);
       }
-	  free(listargs);
+      free(listargs);
     }
   }
   free(cwd);
@@ -105,44 +118,83 @@ char **parse_args(char *line) {
     } else {
       strtemp = strend;
     }
-	// Add code to parse quotes 
-	if (strlen(strstart)) {
+    // Add code to parse quotes 
+    if (strlen(strstart)) {
       liststr[i] = malloc(strlen(strstart) + 1);
       strcpy(liststr[i],strstart);
       i++;
-	}
+    }
   }
   liststr[i] = NULL;
   return liststr;
 }
+/* */
 int inquotes(char *string, char *ptinstring) {
-	int qlvl = 0;
-	char qtype = 0;
-	char *p = string;
-	char *temp = strchr(string,'\'');
-	if (temp == NULL || temp > ptinstring) {
-		temp = strchr(string,'"');
-		if (temp == NULL || temp > ptinstring) {
-			return 0;
-		}
-	}	
-	//printf("string: '%s'\n",string);
-	while (p < ptinstring && p != NULL) {
-		char *q = MIN(strchr(p,'\''),strchr(p,'"'));
-		if (q == NULL || q >= ptinstring) {break;}
-		//printf("q: '%s'\n",q);
-		if (qlvl == 0) {
-			if (q == string || *(q-1) != '\\') {
-				qtype = *q;
-				qlvl = 1;
-			}
-		} else {
-			if (*q == qtype && (q == string || *(q-1) != '\\')) {
-				qlvl = 0;
-			}
-		}
-		p = q + 1;
-		//printf("qlvl: %d\n",qlvl);
-	}
-	return qlvl;
+  int qlvl = 0;
+  char qtype = 0;
+  char *p = string;
+  char *temp = strchr(string,'\'');
+  if (temp == NULL || temp > ptinstring) {
+    temp = strchr(string,'"');
+    if (temp == NULL || temp > ptinstring) {
+      return 0;
+    }
+  }	
+  //printf("string: '%s'\n",string);
+  while (p < ptinstring && p != NULL) {
+    char *q = MIN(strchr(p,'\''),strchr(p,'"'));
+    if (q == NULL || q >= ptinstring) {break;}
+    //printf("q: '%s'\n",q);
+    if (qlvl == 0) {
+      if (q == string || *(q-1) != '\\') {
+	qtype = *q;
+	qlvl = 1;
+      }
+    } else {
+      if (*q == qtype && (q == string || *(q-1) != '\\')) {
+	qlvl = 0;
+      }
+    }
+    p = q + 1;
+    //printf("qlvl: %d\n",qlvl);
+  }
+  return qlvl;
+}
+char *replace_string(char *haystack, char *needle, char *toreplace) {
+  printf("'%s' '%s' '%s'\n",haystack,needle,toreplace);
+  char *tmpchr, *tmpndl, *lpchr;
+  tmpchr = haystack;
+  while (*tmpchr) {
+    lpchr = tmpchr;
+    tmpndl = needle;
+    while (*lpchr == *tmpndl) {
+      lpchr++;
+      tmpndl++;
+      if (!(*tmpndl)) {
+	break;
+      }
+      if (!(*lpchr)) {
+	return NULL;
+      }
+    }
+    if (!(*tmpndl)) {
+      break;
+    }
+    tmpchr++;
+  }
+  if (tmpchr - haystack >= strlen(haystack)) {
+    return NULL;
+  }
+  char *half2, *new;
+  int sizehalf1, sizehalf2, sizenew;
+  sizehalf1 = tmpchr - haystack;
+  sizehalf2 = strlen(haystack) - (tmpchr - haystack) - strlen(needle);
+  half2 = malloc(sizehalf2);
+  memcpy(half2,tmpchr+strlen(needle),sizehalf2);
+  sizenew = sizehalf1 + strlen(toreplace) + sizehalf2;
+  printf("half2: '%s'\n",half2);
+  printf("sizehalf1: %d sizehalf2: %d sizenew: %d\n",sizehalf1,sizehalf2,sizenew);
+  new = malloc(sizenew);
+  memcpy(new,haystack,sizehalf1);
+  return new;
 }
