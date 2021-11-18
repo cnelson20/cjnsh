@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
   gethostname(computer,sizeof(computer));
 
   while (1) {
-	printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
+    printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
     fgets(inputstring,65536,stdin);
     char *newline = strchr(inputstring,'\n');
     while(newline != NULL) {
