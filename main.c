@@ -4,12 +4,12 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <pwd.h>
-#define MIN(a,b) (a != NULL ? (a < b ? a : b) : b) 
 
 /* function definitions */
 char **parse_args(char *line);
 int inquotes(char *string, char *ptinstring);
 char *replace_string(char *haystack, char *needle, char *toreplace);
+void *min(void *a, void *b);
 int main();
 
 /* global variables */
@@ -31,8 +31,10 @@ int main() {
 	homedir = getpwuid(getuid())->pw_dir;
   }
   char *tmp = replace_string(cwd,homedir,"~");
-  free(cwd);
-  cwd = tmp;
+  if (tmp != NULL) {
+	free(cwd);
+	cwd = tmp;
+  }
   
   getlogin_r(user,sizeof(user));
   gethostname(computer,sizeof(computer));
@@ -72,8 +74,10 @@ int main() {
 		free(cwd);
 		cwd = getcwd(NULL,0);
 		char *tmp = replace_string(cwd,homedir,"~");
-		free(cwd);
-		cwd = tmp;
+		if (tmp != NULL) {
+	      free(cwd);
+	      cwd = tmp;
+		}
       } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
 		exit(0);
       } else if (fork()) {
@@ -88,7 +92,7 @@ int main() {
 		i++;
 	  }
 	  free(listargs);
-		
+	  
     }
   }
   
@@ -107,40 +111,44 @@ char **parse_args(char *line) {
   char *strtemp = line;
 
   char **liststr;
-  int length = 0;
-  while (strtemp < strend) {
-    char *strstart = strtemp;
-    if (strtemp != line) {
-      *(strtemp - 1) = ' ';
-    }
-    if (strchr(strtemp,' ') != NULL) {
-      strsep(&strtemp," ");
-    } else {
-      strtemp = strend;
-    }
-    length++;
-  }
-  liststr = malloc((length + 1) * sizeof(char *));
-  
+  liststr = malloc(0);
+    
   int i = 0;
   strtemp = line;
-  while (strtemp < strend) {
+  while (strtemp < strend && strtemp != NULL) {
     char *strstart = strtemp;
     if (strtemp != line) {
       *(strtemp - 1) = ' ';
     }
-    if (strchr(strtemp,' ') != NULL) {
-      strsep(&strtemp," ");
+    if (strchr(strtemp,' ') != NULL) {	  
+	  char *quote = min(strchr(strstart,'\''),strchr(strstart,'"'));	
+	  //printf("__%s__ '%s'\n",quote,strstart);
+	  if (quote != NULL && (quote < strchr(strstart,' ') || strchr(strstart,' ') == NULL)) {
+		char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
+		//printf("qtype: %c\n",qtype);
+		char *temp = quote;
+		while (*(temp+1) != qtype && *temp != '\\') {
+			temp++;
+		}
+		strtemp = temp+2;
+        *(temp+1) = '\0';
+		strstart++;
+	  } else {
+	    strsep(&strtemp," ");
+	  }
+	  // code  
     } else {
       strtemp = strend;
-    }
-    // Add code to parse quotes 
+    } 
     if (strlen(strstart)) {
+	  // Reallocate memory, then copy string 
+	  liststr = realloc(liststr,(i+1)*8);
       liststr[i] = malloc(strlen(strstart) + 1);
-      strcpy(liststr[i],strstart);
-      i++;
+      strcpy(liststr[i],strstart); 
+      i++;	  
     }
   }
+  liststr = realloc(liststr,(i+1)*8);
   liststr[i] = NULL;
   return liststr;
 }
@@ -150,25 +158,28 @@ int inquotes(char *string, char *ptinstring) {
   char qtype = 0;
   char *p = string;
   char *temp = strchr(string,'\'');
+  // If neither ' or " in string return 0
   if (temp == NULL || temp > ptinstring) {
     temp = strchr(string,'"');
     if (temp == NULL || temp > ptinstring) {
       return 0;
     }
   }	
-  //printf("string: '%s'\n",string);
+  /*printf("string: '%s'\n",string); */
   while (p < ptinstring && p != NULL) {
-    char *q = MIN(strchr(p,'\''),strchr(p,'"'));
+    char *q = min(strchr(p,'\''),strchr(p,'"'));
     if (q == NULL || q >= ptinstring) {break;}
-    //printf("q: '%s'\n",q);
+    /*printf("q: '%s'\n",q);*/
     if (qlvl == 0) {
+	  // If is first byte of string or last byte is not backslash
       if (q == string || *(q-1) != '\\') {
-	qtype = *q;
-	qlvl = 1;
+	    qtype = *q;
+	    qlvl = 1;
       }
     } else {
+	  // If match ' vs " and is first byte or does not proceed a backslash
       if (*q == qtype && (q == string || *(q-1) != '\\')) {
-	qlvl = 0;
+	    qlvl = 0;
       }
     }
     p = q + 1;
@@ -183,34 +194,55 @@ char *replace_string(char *haystack, char *needle, char *toreplace) {
   while (*tmpchr) {
     lpchr = tmpchr;
     tmpndl = needle;
+	
+	// while letters of haystack and needle match
     while (*lpchr == *tmpndl) {
       lpchr++;
       tmpndl++;
+	  // if end of needle (success), break
       if (!(*tmpndl)) {
-	break;
+	    break;
       }
+	  // if end of string reached, return null
       if (!(*lpchr)) {
-	return NULL;
+	    return NULL;
       }
     }
+	// if end of while loop was because end of needle, break
     if (!(*tmpndl)) {
       break;
     }
     tmpchr++;
   }
+  // if end of string was reached return NULL
   if (tmpchr - haystack >= strlen(haystack)) {
     return NULL;
   }
   char *half2, *new;
   int sizehalf1, sizehalf2, sizenew;
+  // Calculate sizes of string before and after matching part
   sizehalf1 = tmpchr - haystack;
   sizehalf2 = strlen(haystack) - (tmpchr - haystack) - strlen(needle);
+  // calc size of new string 
   sizenew = sizehalf1 + sizehalf2 + strlen(toreplace);
   //printf("sizehalf1: %d sizehalf2: %d sizenew: %d\n",sizehalf1,sizehalf2,sizenew);
   new = malloc(sizenew+1);
+  // Copy half before, what to replace, and half after 
   memcpy(new,haystack,sizehalf1);
   memcpy(new,toreplace,strlen(toreplace));
   memcpy(new+sizehalf1+strlen(toreplace),tmpchr+strlen(needle),sizehalf2);
+  // Null-terminate string 
+  *(new+sizehalf1+strlen(toreplace)+sizehalf2) = '\0';
   //printf("'%s'\n",new);
   return new;
+}
+
+void *min(void *a, void *b) {
+	if (a == NULL) {
+	  return b;	
+	} else if (b == NULL) {
+	  return a;	
+	} else {
+	  return a < b ? a : b;	
+	}
 }
