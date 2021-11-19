@@ -10,3 +10,13 @@ My shell for the class Systems Level Programming
 
 ## To Do
 Pipes, redirection
+
+## Function List
+
+```c
+**parse_args(char *line);
+int inquotes(char *string, char *ptinstring);
+char *replace_string(char *haystack, char *needle, char *toreplace);
+void *min(void *a, void *b);
+int main();
+```
