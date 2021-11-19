@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <pwd.h>
@@ -70,13 +71,16 @@ int main() {
       semicolon = strsep(&line,";");
       listargs = parse_args(semicolon);
       if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0],"cd")) {
-		chdir(listargs[1]);
-		free(cwd);
-		cwd = getcwd(NULL,0);
-		char *tmp = replace_string(cwd,homedir,"~");
-		if (tmp != NULL) {
-	      free(cwd);
-	      cwd = tmp;
+		if (chdir(listargs[1]) == 0) {
+		  free(cwd);
+	      cwd = getcwd(NULL,0);
+		  char *tmp = replace_string(cwd,homedir,"~");
+		  if (tmp != NULL) {
+		    free(cwd);
+			cwd = tmp;
+		  }
+		} else {
+		  printf("-cjnsh: %s: %s: %s\n",listargs[0],listargs[1],strerror(errno));	
 		}
       } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
 		exit(0);
@@ -85,6 +89,8 @@ int main() {
 		wait(&childstatus);
       } else {
 		execvp(listargs[0],listargs);
+		printf("-cjnsh: %s: %s\n",listargs[0],strerror(errno));	
+		exit(0);
       }
 	  int i = 0;
 	  while (listargs[i]) {
@@ -106,10 +112,33 @@ int main() {
   returns a pointer to an array of strings, with the last element followed by NULL
   Each element should be passed into free()
 */
+// For reference: You can escape quotes but the backslashes still show up, fix this
 char **parse_args(char *line) {
-  char *strend = strchr(line,'\0');
-  char *strtemp = line;
+  char *strtemp;
+  char *ogline = line;
 
+  strtemp = strchr(line,'~');
+  while (strtemp != NULL) {
+  if (!inquotes(line,strtemp) && (strtemp == line || *(strtemp-1) == ' ') &&(*(strtemp+1) == ' ' || *(strtemp+1) == '\0')) {
+	  char *temp = replace_string(line,"~",homedir);
+	  if (temp != NULL) {
+	    if (line != ogline) {
+		  free(line);
+		}
+		line = temp;
+	  }
+	  strtemp = strchr(line,'~');
+	} else {
+		strtemp = strchr(strtemp+1,'~');
+	}
+  }
+  /*if (strlen(ogline)) {
+	printf("Line: '%s'\n",ogline);
+	printf("Line: '%s'\n",line);
+  }*/
+
+  strtemp = line;
+  char *strend = strchr(line,'\0');
   char **liststr;
   liststr = malloc(0);
     
@@ -120,12 +149,11 @@ char **parse_args(char *line) {
     if (strtemp != line) {
       *(strtemp - 1) = ' ';
     }
+	char *quote = min(strchr(strstart,'\''),strchr(strstart,'"'));
     if (strchr(strtemp,' ') != NULL) {	  
-	  char *quote = min(strchr(strstart,'\''),strchr(strstart,'"'));	
-	  //printf("__%s__ '%s'\n",quote,strstart);
-	  if (quote != NULL && (quote < strchr(strstart,' ') || strchr(strstart,' ') == NULL)) {
+	  //If line has space, check whether the next quote is before the space
+	  if (quote != NULL && quote < strchr(strstart,' ')) {
 		char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
-		//printf("qtype: %c\n",qtype);
 		char *temp = quote;
 		while (*(temp+1) != qtype && *temp != '\\') {
 			temp++;
@@ -134,10 +162,17 @@ char **parse_args(char *line) {
         *(temp+1) = '\0';
 		strstart++;
 	  } else {
+		// If not, just proceed to copy line 
 	    strsep(&strtemp," ");
 	  }
-	  // code  
+	  // If last token of line, find type of quote and strrchr it, remove them and keep spaces  
     } else {
+	  if (quote != NULL) {
+		char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
+		char *temp = quote;
+		*strrchr(strstart,qtype) = '\0';
+		strstart++;
+	  }
       strtemp = strend;
     } 
     if (strlen(strstart)) {
@@ -152,7 +187,10 @@ char **parse_args(char *line) {
   liststr[i] = NULL;
   return liststr;
 }
-/* */
+/* 
+  Determines whether a character within a string is in quotes (single or double) 
+  Returns 1 / 0 (True / False)
+*/
 int inquotes(char *string, char *ptinstring) {
   int qlvl = 0;
   char qtype = 0;
@@ -187,6 +225,12 @@ int inquotes(char *string, char *ptinstring) {
   }
   return qlvl;
 }
+
+/* 
+  Finds needle in haystack and returns a new string where it has been replaced by toreplace
+  Returns a pointer to a new string, NULL if needle was not found.
+  Caller should free() the old string
+*/
 char *replace_string(char *haystack, char *needle, char *toreplace) {
   //printf("'%s' '%s' '%s'\n",haystack,needle,toreplace);
   char *tmpchr, *tmpndl, *lpchr;
@@ -229,14 +273,19 @@ char *replace_string(char *haystack, char *needle, char *toreplace) {
   new = malloc(sizenew+1);
   // Copy half before, what to replace, and half after 
   memcpy(new,haystack,sizehalf1);
-  memcpy(new,toreplace,strlen(toreplace));
+  memcpy(new+sizehalf1,toreplace,strlen(toreplace));
   memcpy(new+sizehalf1+strlen(toreplace),tmpchr+strlen(needle),sizehalf2);
   // Null-terminate string 
+  //printf("sizehalf1: %d strlen(toreplace): %d sizehalf2: %d\n",sizehalf1,strlen(toreplace),sizehalf2);
   *(new+sizehalf1+strlen(toreplace)+sizehalf2) = '\0';
-  //printf("'%s'\n",new);
+  //printf("Haystack: '%s'\nNew: '%s'\n",haystack,new);
   return new;
 }
 
+/* 
+  Returns the minimum of two pointers unless one is null, then return the other 
+  (if both are null, returns null)
+*/
 void *min(void *a, void *b) {
 	if (a == NULL) {
 	  return b;	
