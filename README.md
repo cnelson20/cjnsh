@@ -10,8 +10,8 @@ My shell for the class Systems Level Programming
 - user, directory printout at prompt
 
 ## To Do
-Redirection
-Removing the backslash from escaped characters
+- Redirection
+- Removing the backslash from escaped characters
 
 ## Function List
 
