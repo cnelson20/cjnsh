@@ -10,6 +10,9 @@
 char **parse_args(char *line);
 int inquotes(char *string, char *ptinstring);
 char *replace_string(char *haystack, char *needle, char *toreplace);
+int execline(char *line);
+int do_pipes(char **listargs);
+char *join(char **liststrings);
 void *min(void *a, void *b);
 int main();
 
@@ -17,6 +20,10 @@ int main();
 char user[256];
 char computer[256];
 char *homedir;
+char *cwd;
+
+char letterr[] = "r";
+char letterw[] = "w";
 
 /* 
    main
@@ -24,10 +31,8 @@ char *homedir;
    returns 0;
 */
 int main() {
-	
-  char **listargs;
   char inputstring[65536];
-  char *cwd = getcwd(NULL,0);
+  cwd = getcwd(NULL,0);
   if ((homedir = getenv("HOME")) == NULL) {
 	homedir = getpwuid(getuid())->pw_dir;
   }
@@ -45,6 +50,7 @@ int main() {
     fgets(inputstring,65536,stdin);
 	
     char *line = inputstring;
+	// Replace newlines (not in quotes) with semicolons
     while(1) {
       char *newline = strchr(line,'\n');
       if (newline == NULL) {break;}
@@ -69,36 +75,7 @@ int main() {
     while(line != NULL) {
       char *semicolon;
       semicolon = strsep(&line,";");
-      listargs = parse_args(semicolon);
-      if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0],"cd")) {
-		if (chdir(listargs[1]) == 0) {
-		  free(cwd);
-	      cwd = getcwd(NULL,0);
-		  char *tmp = replace_string(cwd,homedir,"~");
-		  if (tmp != NULL) {
-		    free(cwd);
-			cwd = tmp;
-		  }
-		} else {
-		  printf("-cjnsh: %s: %s: %s\n",listargs[0],listargs[1],strerror(errno));	
-		}
-      } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
-		exit(0);
-      } else if (fork()) {
-		int childstatus;
-		wait(&childstatus);
-      } else {
-		execvp(listargs[0],listargs);
-		printf("-cjnsh: %s: %s\n",listargs[0],strerror(errno));	
-		exit(0);
-      }
-	  int i = 0;
-	  while (listargs[i]) {
-		free(listargs[i]);
-		i++;
-	  }
-	  free(listargs);
-	  
+      execline(semicolon);
     }
   }
   
@@ -108,11 +85,132 @@ int main() {
 }
 
 /* 
+  Exec a line by running parse_args and doing the right stuff
+  returns exit value of executed line
+*/
+int execline(char *line) {
+	char **listargs = parse_args(line);
+    if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0],"cd")) {
+	  if (chdir(listargs[1]) == 0) {
+		free(cwd);
+	    cwd = getcwd(NULL,0);
+		char *tmp = replace_string(cwd,homedir,"~");
+		if (tmp != NULL) {
+		  free(cwd);
+		  cwd = tmp;
+		}
+	  } else {
+		printf("-cjnsh: %s: %s: %s\n",listargs[0],listargs[1],strerror(errno));	
+	  }
+    } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
+	  exit(0);
+    } else if (fork()) {
+	  int childstatus;
+	  wait(&childstatus);
+	  return WEXITSTATUS(childstatus);
+    } else {
+	  int i;
+	  for (i = 0; listargs[i] != NULL; i++);
+	  do_pipes(listargs);
+	  exit(0);
+    }
+	int i = 0;
+	while (listargs[i]) {
+	  free(listargs[i]);
+	  i++;
+	}
+  free(listargs);
+  
+}
+
+/*
+  Handles pipes, and redirection 
+*/
+// Note: only handles one pipe per line (or commands seperated by semicolons)
+int do_pipes(char **listargs) {
+	int length; 
+	for (length = 0; listargs[length] != NULL; length++);
+	int i;
+	for (i = length - 2; i >= 1; i--) {
+		if (!strcmp(listargs[i],"|")) {
+			char *joined1, *joined2;
+			joined1 = join(&(listargs[i+1]));
+			//printf("'%s'\n",joined1);
+			
+			char *temp = listargs[i];
+			listargs[i] = NULL;
+			joined2 = join(listargs);
+			//printf("'%s'\n",joined2);
+
+			listargs[i] = temp;
+			FILE *pipefrom = popen(joined2,letterr);
+			FILE *pipeto = popen(joined1,letterw);
+			while (1) {
+				if (feof(pipefrom)) {break;}
+				fputc(fgetc(pipefrom),pipeto);
+			}
+			pclose(pipefrom);
+			pclose(pipeto);
+			
+			free(joined1);
+			free(joined2);
+			return(1);
+		}
+	}
+	errno = 0;
+	execvp(listargs[0],listargs);
+	if (errno) {
+		printf("-cjnsh: %s: %s\n",listargs[0],strerror(errno));
+	}
+	return 0;
+}
+
+/*
+  Joins list of strings with spaces 
+  Each string is enclosed with quotes
+*/
+char *join(char **liststrings) {
+	int i, totalstringlength;
+	totalstringlength = 0;
+	// Calculate total length of string by mallocing it.
+	for (i = 0; liststrings[i] != NULL; i++) {
+		char *j = liststrings[i];
+		if (i != 0) {totalstringlength++;} // space inbetween strings
+		totalstringlength += 2; // begin & end "
+		while (*j) {
+			totalstringlength += ((*j == '\'' || *j == '"') ? 2 : 1);
+			j++;
+		}
+	}
+	char *joined = malloc(totalstringlength+1);
+	// Combine strings in joined
+	char *tcp = joined;
+	for (i = 0; liststrings[i] != NULL; i++) {
+		char *j = liststrings[i];
+		if (i != 0) {*tcp = ' '; tcp++;} // space inbetween strings
+		*tcp = '"'; tcp++;
+		while (*j) {
+			if (*j == '\\' || *j == '\'' || *j == '"') {
+				*tcp = '\\';
+				tcp++;
+			}
+			// Copy char, increment pointer 
+			*tcp = *j;
+			tcp++;
+			j++;
+		}
+		*tcp = '"'; tcp++;
+	}
+	joined[totalstringlength] = '\0';
+	return joined;
+}
+
+/* 
   Parses a line of text into a 2d array of arguments (seperates by spaces)
   returns a pointer to an array of strings, with the last element followed by NULL
   Each element should be passed into free()
 */
-// For reference: You can escape quotes but the backslashes still show up, fix this
+// Note: You can escape quotes / other backslashes but the backslashes still show up, fix this
 char **parse_args(char *line) {
   char *strtemp;
   char *ogline = line;
@@ -287,6 +385,7 @@ char *replace_string(char *haystack, char *needle, char *toreplace) {
   (if both are null, returns null)
 */
 void *min(void *a, void *b) {
+	//return (a == NULL) ? b : ((b == NULL) ? a : (a < b ? a : b));
 	if (a == NULL) {
 	  return b;	
 	} else if (b == NULL) {
