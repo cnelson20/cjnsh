@@ -5,11 +5,13 @@ My shell for the class Systems Level Programming
 - Semicolon parsing
 - Quote handling (and within them newlines)
 - Replacement of ~ with home directory
+- Pipe
 
 - user, directory printout at prompt
 
 ## To Do
-Pipes, redirection
+Redirection
+Removing the backslash from escaped characters
 
 ## Function List
 
