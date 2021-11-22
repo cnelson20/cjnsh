@@ -4,7 +4,7 @@ My shell for the class Systems Level Programming
 ## Features
 - Semicolon parsing
 - Quote handling (and within them newlines)
-- Replacement of ~ with home directory (when ~ is its own word)
+- Replacement of ~ with home directory 
 - Pipe
 - Redirection into a file
 
