@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -31,6 +32,7 @@ char letterw[] = "w";
    returns 0;
 */
 int main() {
+  // Setup 
   char inputstring[65536];
   cwd = getcwd(NULL,0);
   if ((homedir = getenv("HOME")) == NULL) {
@@ -45,7 +47,10 @@ int main() {
   getlogin_r(user,sizeof(user));
   gethostname(computer,sizeof(computer));
 
+  // Done with setup 	
+
   while (1) {
+	// Prints user in green, directory in yellow
     printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
     fgets(inputstring,65536,stdin);
 	
@@ -72,7 +77,7 @@ int main() {
     }
     
     line = inputstring;
-    while(line != NULL) {
+    while(line && *line) { // Line is not NULL and doesn't point to the null terminator
       char *semicolon;
       semicolon = strsep(&line,";");
       execline(semicolon);
@@ -128,11 +133,47 @@ int execline(char *line) {
 */
 // Note: only handles one pipe per line (or commands seperated by semicolons)
 int do_pipes(char **listargs) {
+	int rval;
 	int length; 
 	for (length = 0; listargs[length] != NULL; length++);
 	int i;
 	for (i = length - 2; i >= 1; i--) {
-		if (!strcmp(listargs[i],"|")) {
+		if (!strcmp(listargs[i],">") || !strcmp(listargs[i],">>")) {
+			int redirectto = open(listargs[i+1],O_WRONLY | O_CREAT | (strlen(listargs[i]) >= 2 ? O_APPEND : 0),0755);
+			if (errno) {
+				printf("-cjnsh: %s: %s\n",listargs[i+1],strerror(errno));
+			} else {
+				int fd_copystdout = dup(STDOUT_FILENO);	
+				// Append if strlen >= 2 (>>)
+				dup2(redirectto,STDOUT_FILENO);
+				char *temppointer = listargs[i];
+				listargs[i] = NULL;
+				
+				do_pipes(listargs);
+				
+				listargs[i] = temppointer;
+				dup2(fd_copystdout,STDOUT_FILENO);
+				close(fd_copystdout);
+				close(redirectto);
+			}
+		} else if (!strcmp(listargs[i],"<")) {
+			int redirectfrom = open(listargs[i+1],O_RDONLY);
+			if (errno) {
+				printf("-cjnsh: %s: %s\n",listargs[i+1],strerror(errno));
+			} else {
+				int fd_copystdin = dup(STDIN_FILENO);	
+				dup2(redirectfrom,STDIN_FILENO);
+				char *temppointer = listargs[i];
+				listargs[i] = NULL;
+				
+				do_pipes(listargs);
+				
+				listargs[i] = temppointer;
+				dup2(fd_copystdin,STDIN_FILENO);
+				close(fd_copystdin);
+				close(redirectfrom);
+			}
+		} else if (!strcmp(listargs[i],"|")) {
 			char *joined1, *joined2;
 			joined1 = join(&(listargs[i+1]));
 			//printf("'%s'\n",joined1);
@@ -149,20 +190,27 @@ int do_pipes(char **listargs) {
 				if (feof(pipefrom)) {break;}
 				fputc(fgetc(pipefrom),pipeto);
 			}
+			errno = 0;
 			pclose(pipefrom);
-			pclose(pipeto);
+			if (errno) {
+				printf("-cjnsh: %s: %s\n",listargs[0],strerror(errno));
+			}
+			int rval = pclose(pipeto);
+			if (errno) {
+				printf("-cjnsh: %s: %s\n",listargs[i+1],strerror(errno));
+			}
 			
 			free(joined1);
 			free(joined2);
-			return(1);
+			return(rval);
 		}
 	}
 	errno = 0;
-	execvp(listargs[0],listargs);
+	rval = execvp(listargs[0],listargs);
 	if (errno) {
 		printf("-cjnsh: %s: %s\n",listargs[0],strerror(errno));
 	}
-	return 0;
+	return rval;
 }
 
 /*
@@ -214,10 +262,11 @@ char *join(char **liststrings) {
 char **parse_args(char *line) {
   char *strtemp;
   char *ogline = line;
-
+ 
+  // Replace ~ with user's home directory 
   strtemp = strchr(line,'~');
   while (strtemp != NULL) {
-  if (!inquotes(line,strtemp) && (strtemp == line || *(strtemp-1) == ' ') &&(*(strtemp+1) == ' ' || *(strtemp+1) == '\0')) {
+  if (!inquotes(line,strtemp) && (strtemp == line || *(strtemp-1) == ' ') && (*(strtemp+1) == ' ' || *(strtemp+1) == '/' || *(strtemp+1) == '\0')) {
 	  char *temp = replace_string(line,"~",homedir);
 	  if (temp != NULL) {
 	    if (line != ogline) {
@@ -230,11 +279,9 @@ char **parse_args(char *line) {
 		strtemp = strchr(strtemp+1,'~');
 	}
   }
-  /*if (strlen(ogline)) {
-	printf("Line: '%s'\n",ogline);
-	printf("Line: '%s'\n",line);
-  }*/
 
+
+  // Split line into args 
   strtemp = line;
   char *strend = strchr(line,'\0');
   char **liststr;
@@ -285,6 +332,7 @@ char **parse_args(char *line) {
   liststr[i] = NULL;
   return liststr;
 }
+
 /* 
   Determines whether a character within a string is in quotes (single or double) 
   Returns 1 / 0 (True / False)
