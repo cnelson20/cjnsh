@@ -6,12 +6,11 @@ My shell for the class Systems Level Programming
 - Quote handling (and within them newlines)
 - Replacement of ~ with home directory 
 - Pipe
-- Redirection into a file
+- Redirection to, from files
 
 - user, directory printout at prompt
 
 ## To Do
-- Redirection from a file
 - Removing the backslash from escaped characters
 
 ## Function List
