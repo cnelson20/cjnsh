@@ -4,13 +4,14 @@ My shell for the class Systems Level Programming
 ## Features
 - Semicolon parsing
 - Quote handling (and within them newlines)
-- Replacement of ~ with home directory
+- Replacement of ~ with home directory (when ~ is its own word)
 - Pipe
+- Redirection into a file
 
 - user, directory printout at prompt
 
 ## To Do
-- Redirection
+- Redirection from a file
 - Removing the backslash from escaped characters
 
 ## Function List
