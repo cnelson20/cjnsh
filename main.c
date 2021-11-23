@@ -26,6 +26,7 @@ char *cwd;
 char letterr[] = "r";
 char letterw[] = "w";
 
+
 /* 
    main
    runs a loop of waiting for input, then executing necessary functions 
@@ -91,9 +92,11 @@ int main() {
 
 /* 
   Exec a line by running parse_args and doing the right stuff
+  line is a string to be parsed and executed
   returns exit value of executed line
 */
 int execline(char *line) {
+	int childstatus;
 	char **listargs = parse_args(line);
     if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0],"cd")) {
 	  if (chdir(listargs[1]) == 0) {
@@ -110,12 +113,8 @@ int execline(char *line) {
     } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
 	  exit(0);
     } else if (fork()) {
-	  int childstatus;
 	  wait(&childstatus);
-	  return WEXITSTATUS(childstatus);
     } else {
-	  int i;
-	  for (i = 0; listargs[i] != NULL; i++);
 	  do_pipes(listargs);
 	  exit(0);
     }
@@ -125,21 +124,24 @@ int execline(char *line) {
 	  i++;
 	}
   free(listargs);
+  return WEXITSTATUS(childstatus);
   
 }
 
 /*
   Handles pipes, and redirection 
+  Listargs is a array of pointers to strings with NULL at the end
+  Returns the return value of the last program run
 */
-// Note: only handles one pipe per line (or commands seperated by semicolons)
-int do_pipes(char **listargs) {
+// Note: only handles one pipe per command, though guidelines say that's fine
+int do_pipes(char **listargs) {	
 	int rval;
 	int length; 
 	for (length = 0; listargs[length] != NULL; length++);
 	int i;
 	for (i = length - 2; i >= 1; i--) {
 		if (!strcmp(listargs[i],">") || !strcmp(listargs[i],">>")) {
-			int redirectto = open(listargs[i+1],O_WRONLY | O_CREAT | (strlen(listargs[i]) >= 2 ? O_APPEND : 0),0755);
+			int redirectto = open(listargs[i+1],O_WRONLY | O_CREAT | (strlen(listargs[i]) >= 2 ? O_APPEND : O_TRUNC),0755);
 			if (errno) {
 				printf("-cjnsh: %s: %s\n",listargs[i+1],strerror(errno));
 			} else {
@@ -176,12 +178,10 @@ int do_pipes(char **listargs) {
 		} else if (!strcmp(listargs[i],"|")) {
 			char *joined1, *joined2;
 			joined1 = join(&(listargs[i+1]));
-			//printf("'%s'\n",joined1);
 			
 			char *temp = listargs[i];
 			listargs[i] = NULL;
 			joined2 = join(listargs);
-			//printf("'%s'\n",joined2);
 
 			listargs[i] = temp;
 			FILE *pipefrom = popen(joined2,letterr);
@@ -190,14 +190,12 @@ int do_pipes(char **listargs) {
 				if (feof(pipefrom)) {break;}
 				fputc(fgetc(pipefrom),pipeto);
 			}
-			errno = 0;
-			pclose(pipefrom);
-			if (errno) {
-				printf("-cjnsh: %s: %s\n",listargs[0],strerror(errno));
+			if (pclose(pipefrom) == -1) {
+				printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[0],strerror(errno));
 			}
 			int rval = pclose(pipeto);
-			if (errno) {
-				printf("-cjnsh: %s: %s\n",listargs[i+1],strerror(errno));
+			if (rval == -1) {
+				printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[i+1],strerror(errno));
 			}
 			
 			free(joined1);
@@ -216,6 +214,7 @@ int do_pipes(char **listargs) {
 /*
   Joins list of strings with spaces 
   Each string is enclosed with quotes
+  Returned value should be passed into free()
 */
 char *join(char **liststrings) {
 	int i, totalstringlength;
@@ -255,26 +254,25 @@ char *join(char **liststrings) {
 
 /* 
   Parses a line of text into a 2d array of arguments (seperates by spaces)
+  Line is a null-terminated string
   returns a pointer to an array of strings, with the last element followed by NULL
-  Each element should be passed into free()
+  Each element of the returned array should be passed into free(), and the array should be as well
 */
 // Note: You can escape quotes / other backslashes but the backslashes still show up, fix this
 char **parse_args(char *line) {
-  char *strtemp;
-  char *ogline = line;
+	char *strtemp;
+	char *ogline = line;
  
-  // Replace ~ with user's home directory 
-  strtemp = strchr(line,'~');
-  while (strtemp != NULL) {
-  if (!inquotes(line,strtemp) && (strtemp == line || *(strtemp-1) == ' ') && (*(strtemp+1) == ' ' || *(strtemp+1) == '/' || *(strtemp+1) == '\0')) {
-	  char *temp = replace_string(line,"~",homedir);
-	  if (temp != NULL) {
-	    if (line != ogline) {
-		  free(line);
+	// Replace ~ with user's home directory 
+	strtemp = strchr(line,'~');
+	while (strtemp != NULL) {
+	if (!inquotes(line,strtemp) && (strtemp == line || *(strtemp-1) == ' ') && (*(strtemp+1) == ' ' || *(strtemp+1) == '/' || *(strtemp+1) == '\0')) {
+		char *temp = replace_string(line,"~",homedir);
+		if (temp != NULL) {
+			if (line != ogline) {free(line);}
+			line = temp;
 		}
-		line = temp;
-	  }
-	  strtemp = strchr(line,'~');
+		strtemp = strchr(line,'~');
 	} else {
 		strtemp = strchr(strtemp+1,'~');
 	}
@@ -335,6 +333,7 @@ char **parse_args(char *line) {
 
 /* 
   Determines whether a character within a string is in quotes (single or double) 
+  String points to a null-terminated string of characters, ptinstring is a pointer to a char within that string
   Returns 1 / 0 (True / False)
 */
 int inquotes(char *string, char *ptinstring) {
@@ -353,7 +352,6 @@ int inquotes(char *string, char *ptinstring) {
   while (p < ptinstring && p != NULL) {
     char *q = min(strchr(p,'\''),strchr(p,'"'));
     if (q == NULL || q >= ptinstring) {break;}
-    /*printf("q: '%s'\n",q);*/
     if (qlvl == 0) {
 	  // If is first byte of string or last byte is not backslash
       if (q == string || *(q-1) != '\\') {
@@ -368,6 +366,7 @@ int inquotes(char *string, char *ptinstring) {
     }
     p = q + 1;
     //printf("qlvl: %d\n",qlvl);
+	
   }
   return qlvl;
 }
@@ -431,6 +430,7 @@ char *replace_string(char *haystack, char *needle, char *toreplace) {
 /* 
   Returns the minimum of two pointers unless one is null, then return the other 
   (if both are null, returns null)
+  a and b are (possibly null) pointers
 */
 void *min(void *a, void *b) {
 	//return (a == NULL) ? b : ((b == NULL) ? a : (a < b ? a : b));
