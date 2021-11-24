@@ -8,14 +8,7 @@
 #include <pwd.h>
 
 /* function definitions */
-char **parse_args(char *line);
-int inquotes(char *string, char *ptinstring);
-char *replace_string(char *haystack, char *needle, char *toreplace);
-int execline(char *line);
-int do_pipes(char **listargs);
-char *join(char **liststrings);
-void *min(void *a, void *b);
-int main();
+#include "main.h"
 
 /* global variables */
 char user[256];
@@ -52,6 +45,7 @@ int main() {
 
   while (1) {
 	// Prints user in green, directory in yellow
+	inputstring[0] = '\0';
     printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
     fgets(inputstring,65536,stdin);
 	
@@ -278,7 +272,6 @@ char **parse_args(char *line) {
 	}
   }
 
-
   // Split line into args 
   strtemp = line;
   char *strend = strchr(line,'\0');
@@ -289,7 +282,7 @@ char **parse_args(char *line) {
   strtemp = line;
   while (strtemp < strend && strtemp != NULL) {
     char *strstart = strtemp;
-    if (strtemp != line) {
+    if (strtemp != line /*&& *(strtemp - 1) == '\0'*/) {
       *(strtemp - 1) = ' ';
     }
 	char *quote = min(strchr(strstart,'\''),strchr(strstart,'"'));
@@ -298,7 +291,16 @@ char **parse_args(char *line) {
 	  if (quote != NULL && quote < strchr(strstart,' ')) {
 		char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
 		char *temp = quote;
-		while (*(temp+1) != qtype && *temp != '\\') {
+		while (*(temp+1) != qtype || *temp == '\\') {
+			// If escaped quote
+			if (*temp == '\\') {
+				//printf("Test: temp: '%c' temp+1: '%c' temp+2: '%c' \n",temp[0],temp[1],temp[2]);
+				char *temp2;
+				for (temp2 = temp; temp2 > strstart; temp2--) {
+					*temp2 = *(temp2 - 1);
+				}
+				strstart++;
+			}
 			temp++;
 		}
 		strtemp = temp+2;
@@ -310,6 +312,7 @@ char **parse_args(char *line) {
 	  }
 	  // If last token of line, find type of quote and strrchr it, remove them and keep spaces  
     } else {
+	  // If quotes are in string 
 	  if (quote != NULL) {
 		char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
 		char *temp = quote;
