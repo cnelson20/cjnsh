@@ -12,13 +12,9 @@
 
 /* global variables */
 char user[256];
-char computer[256];
-char *homedir;
+char prompt[1024];
 char *cwd;
-
-char letterr[] = "r";
-char letterw[] = "w";
-
+char *homedir;
 
 /* 
    main
@@ -39,15 +35,13 @@ int main() {
   }
   
   getlogin_r(user,sizeof(user));
-  gethostname(computer,sizeof(computer));
 
   // Done with setup 	
 
   while (1) {
 	// Prints user in green, directory in yellow
-	inputstring[0] = '\0';
-    printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
-    fgets(inputstring,65536,stdin);
+	printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
+    fgets(inputstring,65536, stdin);
 	
     char *line = inputstring;
 	// Replace newlines (not in quotes) with semicolons
@@ -56,16 +50,15 @@ int main() {
       if (newline == NULL) {break;}
 	  
       while (newline != NULL && inquotes(line,newline)) {
-	newline = strchr(newline+1,'\n');  
+		newline = strchr(newline+1,'\n');  
       }
       if (newline == NULL) {
-	fgets(inputstring + strlen(inputstring),65536 - strlen(inputstring),stdin);
-	newline = line;
-	continue;
+		printf("> ");
+		fgets(inputstring + strlen(inputstring),65536 - strlen(inputstring),stdin);
+		newline = line;
+		continue;
       }
-      //printf("'%s'\n",inputstring);
-      //char *test = inputstring;
-      //while (*test) {printf("%hhx-%d ",*test,inquotes(line,test));test++;}
+     
       *newline = ';';
 	  
       line = newline + 1; 
@@ -81,6 +74,7 @@ int main() {
   
   /* free extraneous variables, cleanup */
   free(cwd);
+  free(homedir);
   return 0;
 }
 
@@ -105,20 +99,34 @@ int execline(char *line) {
 		printf("-cjnsh: %s: %s: %s\n",listargs[0],listargs[1],strerror(errno));	
 	  }
     } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
-	  exit(0);
-    } else if (fork()) {
-	  wait(&childstatus);
+	  if (listargs[1] == NULL) {
+		exit(0);
+	  }
+	  int i;
+	  sscanf(listargs[1],"%d",&i);
+	  exit(i);
     } else {
-	  do_pipes(listargs);
-	  exit(0);
+		int i = 0;
+		while (listargs[i]) {i++;}
+		i--;
+		if (!strcmp(listargs[i],"&")) {
+			listargs[i] = NULL;
+			i = 0;
+		} else { i = 1; }
+		if (fork()) {
+			if (i) { wait(&childstatus); }
+		} else {
+			do_pipes(listargs);
+			exit(0); // Do pipes runs exec but just in case 
+		}
     }
 	int i = 0;
 	while (listargs[i]) {
 	  free(listargs[i]);
 	  i++;
 	}
-  free(listargs);
-  return WEXITSTATUS(childstatus);
+	free(listargs);
+	return WEXITSTATUS(childstatus);
   
 }
 
@@ -178,15 +186,15 @@ int do_pipes(char **listargs) {
 			joined2 = join(listargs);
 
 			listargs[i] = temp;
-			FILE *pipefrom = popen(joined2,letterr);
-			FILE *pipeto = popen(joined1,letterw);
+			FILE *pipefrom = popen(joined2,"r");
+			FILE *pipeto = popen(joined1,"w");
 			while (1) {
 				if (feof(pipefrom)) {break;}
 				fputc(fgetc(pipefrom),pipeto);
 			}
-			if (pclose(pipefrom) == -1) {
-				printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[0],strerror(errno));
-			}
+			//if (pclose(pipefrom) == -1) {
+			//	printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[0],strerror(errno));
+			//}
 			int rval = pclose(pipeto);
 			if (rval == -1) {
 				printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[i+1],strerror(errno));
