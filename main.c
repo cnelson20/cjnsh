@@ -105,7 +105,7 @@ int execline(char *line) {
 	  int i;
 	  sscanf(listargs[1],"%d",&i);
 	  exit(i);
-    } else {
+    } else if (listargs[0] != NULL) {
 		int i = 0;
 		while (listargs[i]) {i++;}
 		i--;
