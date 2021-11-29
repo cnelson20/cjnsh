@@ -13,10 +13,9 @@
 
 /* global variables */
 char user[256];
-char computer[256];
-char *homedir;
+char prompt[1024];
 char *cwd;
-
+char *homedir;
 
 /* 
    main
@@ -37,15 +36,13 @@ int main() {
   }
   
   getlogin_r(user,sizeof(user));
-  gethostname(computer,sizeof(computer));
 
   // Done with setup 	
 
   while (1) {
 	// Prints user in green, directory in yellow
-	inputstring[0] = '\0';
-    printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
-    fgets(inputstring,65536,stdin);
+	printf("\033[;32m%s \033[;33m%s\033[0m $ ",user,cwd);
+    fgets(inputstring,65536, stdin);
 	
     char *line = inputstring;
 	// Replace newlines (not in quotes) with semicolons
@@ -63,9 +60,7 @@ int main() {
 		newline = line;
 		continue;
       }
-      //printf("'%s'\n",inputstring);
-      //char *test = inputstring;
-      //while (*test) {printf("%hhx-%d ",*test,inquotes(line,test));test++;}
+     
       *newline = ';';
 	  
       line = newline + 1; 
@@ -81,6 +76,7 @@ int main() {
   
   /* free extraneous variables, cleanup */
   free(cwd);
+  free(homedir);
   return 0;
 }
 
@@ -105,20 +101,34 @@ int execline(char *line) {
 		printf("-cjnsh: %s: %s: %s\n",listargs[0],listargs[1],strerror(errno));	
 	  }
     } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
-	  exit(0);
-    } else if (fork()) {
-	  wait(&childstatus);
-    } else {
-	  do_pipes(listargs);
-	  exit(0);
+	  if (listargs[1] == NULL) {
+		exit(0);
+	  }
+	  int i;
+	  sscanf(listargs[1],"%d",&i);
+	  exit(i);
+    } else if (listargs[0] != NULL) {
+		int i = 0;
+		while (listargs[i]) {i++;}
+		i--;
+		if (!strcmp(listargs[i],"&")) {
+			listargs[i] = NULL;
+			i = 0;
+		} else { i = 1; }
+		if (fork()) {
+			if (i) { wait(&childstatus); }
+		} else {
+			do_pipes(listargs);
+			exit(0); // Do pipes runs exec but just in case 
+		}
     }
 	int i = 0;
 	while (listargs[i]) {
 	  free(listargs[i]);
 	  i++;
 	}
-  free(listargs);
-  return WEXITSTATUS(childstatus);
+	free(listargs);
+	return WEXITSTATUS(childstatus);
   
 }
 
@@ -184,9 +194,9 @@ int do_pipes(char **listargs) {
 				if (feof(pipefrom)) {break;}
 				fputc(fgetc(pipefrom),pipeto);
 			}
-			if (pclose(pipefrom) == -1) {
-				printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[0],strerror(errno));
-			}
+			//if (pclose(pipefrom) == -1) {
+			//	printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[0],strerror(errno));
+			//}
 			int rval = pclose(pipeto);
 			if (rval == -1) {
 				printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[i+1],strerror(errno));
@@ -221,99 +231,82 @@ char **parse_args(char *line) {
 	// Replace ~ with user's home directory 
 	strtemp = strchr(line,'~');
 	while (strtemp != NULL) {
-	if (!inquotes(line,strtemp) && (strtemp == line || *(strtemp-1) == ' ') && (*(strtemp+1) == ' ' || *(strtemp+1) == '/' || *(strtemp+1) == '\0')) {
-		char *temp = replace_string(line,"~",homedir);
-		if (temp != NULL) {
-			if (line != ogline) {free(line);}
-			line = temp;
+		if (!inquotes(line,strtemp) && (strtemp == line || *(strtemp-1) == ' ') && (*(strtemp+1) == ' ' || *(strtemp+1) == '/' || *(strtemp+1) == '\0')) {
+			char *temp = replace_string(line,"~",homedir);
+			if (temp != NULL) {
+				if (line != ogline) {free(line);}
+				line = temp;
+			}
+			strtemp = strchr(line,'~');
+		} else {
+			strtemp = strchr(strtemp+1,'~');
 		}
-		strtemp = strchr(line,'~');
-	} else {
-		strtemp = strchr(strtemp+1,'~');
 	}
-  }
-
-  // Split line into args 
-  strtemp = line;
-  char *strend = strchr(line,'\0');
-  char **liststr;
-  liststr = malloc(0);
-    
-  int i = 0;
-  strtemp = line;
-  while (strtemp < strend && strtemp != NULL) {
-    char *strstart = strtemp;
-    if (strtemp != line /*&& *(strtemp - 1) == '\0'*/) {
-      *(strtemp - 1) = ' ';
-    }
-	char *quote = min(strchr(strstart,'\''),strchr(strstart,'"'));
-    if (strchr(strtemp,' ') != NULL) {	  
-	  //If line has space, check whether the next quote is before the space
-	  if (quote != NULL && quote < strchr(strstart,' ')) {
-		char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
-		char *temp = quote;
-		char lastquotes = 1; // boolean for backslash check  
-		while (*(temp+1) != qtype || *temp == '\\') {
-			// If escaped quote
-			if (*temp == '\\' && escapeable(*(temp+1)) && lastquotes) {
-				//printf("Test: temp: '%c' temp+1: '%c' temp+2: '%c' \n",temp[0],temp[1],temp[2]);
-				char *temp2;
-				for (temp2 = temp; temp2 > strstart; temp2--) {
-					*temp2 = *(temp2 - 1);
+	
+	// Split line into args 
+	strtemp = line;
+	char *strend = strchr(line,'\0');
+	char **liststr;
+	liststr = malloc(0);
+		
+	int i = 0;
+	strtemp = line;
+	while (strtemp < strend && strtemp != NULL) {
+		char *strstart = strtemp;
+		if (strtemp != line /*&& *(strtemp - 1) == '\0'*/) {
+		  *(strtemp - 1) = ' ';
+		}
+		char *quote = min(strchr(strstart,'\''),strchr(strstart,'"')); // First occurance of ' or ".
+		if (strchr(strtemp,' ') != NULL) {	  
+			//If line has space, check whether the next quote is before the space
+				if (quote != NULL && quote < strchr(strstart,' ')) {
+					char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
+					char *temp = quote;
+					char lastquotes = 1; // boolean for backslash check  
+					while (*(temp+1) != qtype || *temp == '\\') {
+						// If escaped quote
+						if (*temp == '\\' && escapeable(*(temp+1)) && lastquotes) {
+							char *temp2;
+							for (temp2 = temp; temp2 > strstart; temp2--) {
+								*temp2 = *(temp2 - 1);
+							}
+							strstart++;
+							lastquotes = 0;
+						} else {
+							lastquotes = 1;
+						}
+						temp++;
 				}
+				strtemp = temp+2;
+				*(temp+1) = '\0';
 				strstart++;
-				lastquotes = 0;
 			} else {
-				lastquotes = 1;
+				//printf("'%s'\n",strstart);
+				// If not, just proceed to copy line 
+				// but check for escaped characters 
+				char *temp = strsep(&strtemp," ");
+				escapecharacters(&strstart,0);
 			}
-			temp++;
+		// If last token of line, find type of quote and strrchr it, remove them and keep spaces  
+		} else {
+		  char *qpos = max(strrchr(strstart,'\''),strrchr(strstart,'"'));
+		  if (qpos && (qpos == strstart || *(qpos-1) != '\\')) {
+			char qtype = *qpos;
+			strstart = strchr(strstart,qtype)+1;
+			*strrchr(strstart,qtype) = '\0';
+			escapecharacters(&strstart,1);
+		  }
+		  strtemp = strend;
+		} 
+		if (strlen(strstart)) {
+		  // Reallocate memory, then copy string 
+		  liststr = realloc(liststr,(i+1)*8);
+		  liststr[i] = malloc(strlen(strstart) + 1);
+		  strcpy(liststr[i],strstart); 
+		  i++;	  
 		}
-		strtemp = temp+2;
-        *(temp+1) = '\0';
-		strstart++;
-	  } else {
-		// If not, just proceed to copy line 
-		// but check for escaped characters 
-	    char *temp = strsep(&strtemp," ");
-		if (temp != NULL) {
-			char lastquotes = 1;
-			while (*temp) {
-				if (*temp == '\\' && lastquotes) {
-					printf("Test: temp: '%c' temp+1: '%c' temp+2: '%c' \n",temp[0],temp[1],temp[2]);
-					char *temp2;
-					for (temp2 = temp; temp2 > strstart; temp2--) {
-						*temp2 = *(temp2 - 1);
-					}
-					strstart++;
-					lastquotes = 0;
-				} else {
-					lastquotes = 1;
-				}
-				temp++;
-			}
-		}
-	  }
-	  // If last token of line, find type of quote and strrchr it, remove them and keep spaces  
-    } else {
-	  // If quotes are in string 
-	  // PARSE ESCAPE CHARACTERS IN THIS 
-	  if (quote != NULL) {
-		char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
-		char *temp = quote;
-		*strrchr(strstart,qtype) = '\0';
-		strstart++;
-	  }
-      strtemp = strend;
-    } 
-    if (strlen(strstart)) {
-	  // Reallocate memory, then copy string 
-	  liststr = realloc(liststr,(i+1)*8);
-      liststr[i] = malloc(strlen(strstart) + 1);
-      strcpy(liststr[i],strstart); 
-      i++;	  
-    }
-  }
-  liststr = realloc(liststr,(i+1)*8);
-  liststr[i] = NULL;
-  return liststr;
+	}
+	liststr = realloc(liststr,(i+1)*8);
+	liststr[i] = NULL;
+	return liststr;
 }

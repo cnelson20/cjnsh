@@ -69,13 +69,13 @@ int inquotes(char *string, char *ptinstring) {
     if (q == NULL || q >= ptinstring) {break;}
     if (qlvl == 0) {
 	  // If is first byte of string or last byte is not backslash
-      if (q == string || *(q-1) != '\\') {
+      if (q == string || *(q-1) != '\\' || (q >= string+2 && *(q-2) == '\\')) {
 	    qtype = *q;
 	    qlvl = 1;
       }
     } else {
 	  // If match ' vs " and is first byte or does not proceed a backslash
-      if (*q == qtype && (q == string || *(q-1) != '\\')) {
+      if (*q == qtype && (q == string || *(q-1) != '\\' || (q >= string+2 && *(q-2) == '\\'))) {
 	    qlvl = 0;
       }
     }
@@ -165,3 +165,37 @@ void *min(void *a, void *b) {
 	  return a < b ? a : b;	
 	}
 }
+
+/* 
+  Returns the greater of two pointers
+  a and b are pointers 
+*/
+void *max(void *a, void *b) {
+	return a > b ? a : b;
+}
+
+
+/* 
+  Escapes characters following backslashes
+  stringpointer is a pointer to a string 
+  quotes is a boolean on whether the characters escapeable should be limited 
+*/
+void escapecharacters(char **stringpointer, char quotes) {
+	//printf("escapecharacters()\n");
+	char lastquotes = 1;
+	char *temp = *stringpointer;
+	while (*temp) {
+		if (*temp == '\\' && lastquotes && (!quotes || escapeable(temp[1]))) {
+			char *temp2;
+			for (temp2 = temp; temp2 > *stringpointer; temp2--) {
+				*temp2 = *(temp2 - 1);
+			}
+			(*stringpointer)++;
+			lastquotes = 0;
+		} else {
+			lastquotes = 1;
+		}
+		//printf("test\n");
+		temp++;
+	}
+}	
