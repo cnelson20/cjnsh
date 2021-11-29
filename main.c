@@ -9,15 +9,13 @@
 
 /* function definitions */
 #include "main.h"
+#include "help.h"
 
 /* global variables */
 char user[256];
 char computer[256];
 char *homedir;
 char *cwd;
-
-char letterr[] = "r";
-char letterw[] = "w";
 
 
 /* 
@@ -56,12 +54,14 @@ int main() {
       if (newline == NULL) {break;}
 	  
       while (newline != NULL && inquotes(line,newline)) {
-	newline = strchr(newline+1,'\n');  
+		newline = strchr(newline+1,'\n');  
       }
+	  // If no closing quote prompt for rest of line 
       if (newline == NULL) {
-	fgets(inputstring + strlen(inputstring),65536 - strlen(inputstring),stdin);
-	newline = line;
-	continue;
+		printf("> ");
+		fgets(inputstring + strlen(inputstring),65536 - strlen(inputstring),stdin);
+		newline = line;
+		continue;
       }
       //printf("'%s'\n",inputstring);
       //char *test = inputstring;
@@ -178,8 +178,8 @@ int do_pipes(char **listargs) {
 			joined2 = join(listargs);
 
 			listargs[i] = temp;
-			FILE *pipefrom = popen(joined2,letterr);
-			FILE *pipeto = popen(joined1,letterw);
+			FILE *pipefrom = popen(joined2,"r");
+			FILE *pipeto = popen(joined1,"w");
 			while (1) {
 				if (feof(pipefrom)) {break;}
 				fputc(fgetc(pipefrom),pipeto);
@@ -205,46 +205,7 @@ int do_pipes(char **listargs) {
 	return rval;
 }
 
-/*
-  Joins list of strings with spaces 
-  Each string is enclosed with quotes
-  Returned value should be passed into free()
-*/
-char *join(char **liststrings) {
-	int i, totalstringlength;
-	totalstringlength = 0;
-	// Calculate total length of string by mallocing it.
-	for (i = 0; liststrings[i] != NULL; i++) {
-		char *j = liststrings[i];
-		if (i != 0) {totalstringlength++;} // space inbetween strings
-		totalstringlength += 2; // begin & end "
-		while (*j) {
-			totalstringlength += ((*j == '\'' || *j == '"') ? 2 : 1);
-			j++;
-		}
-	}
-	char *joined = malloc(totalstringlength+1);
-	// Combine strings in joined
-	char *tcp = joined;
-	for (i = 0; liststrings[i] != NULL; i++) {
-		char *j = liststrings[i];
-		if (i != 0) {*tcp = ' '; tcp++;} // space inbetween strings
-		*tcp = '"'; tcp++;
-		while (*j) {
-			if (*j == '\\' || *j == '\'' || *j == '"') {
-				*tcp = '\\';
-				tcp++;
-			}
-			// Copy char, increment pointer 
-			*tcp = *j;
-			tcp++;
-			j++;
-		}
-		*tcp = '"'; tcp++;
-	}
-	joined[totalstringlength] = '\0';
-	return joined;
-}
+
 
 /* 
   Parses a line of text into a 2d array of arguments (seperates by spaces)
@@ -252,7 +213,7 @@ char *join(char **liststrings) {
   returns a pointer to an array of strings, with the last element followed by NULL
   Each element of the returned array should be passed into free(), and the array should be as well
 */
-// Note: You can escape quotes / other backslashes but the backslashes still show up, fix this
+// Note: Escaped characters in the last arg of a command arent parsed ,except for quotes 
 char **parse_args(char *line) {
 	char *strtemp;
 	char *ogline = line;
@@ -291,15 +252,19 @@ char **parse_args(char *line) {
 	  if (quote != NULL && quote < strchr(strstart,' ')) {
 		char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
 		char *temp = quote;
+		char lastquotes = 1; // boolean for backslash check  
 		while (*(temp+1) != qtype || *temp == '\\') {
 			// If escaped quote
-			if (*temp == '\\') {
+			if (*temp == '\\' && escapeable(*(temp+1)) && lastquotes) {
 				//printf("Test: temp: '%c' temp+1: '%c' temp+2: '%c' \n",temp[0],temp[1],temp[2]);
 				char *temp2;
 				for (temp2 = temp; temp2 > strstart; temp2--) {
 					*temp2 = *(temp2 - 1);
 				}
 				strstart++;
+				lastquotes = 0;
+			} else {
+				lastquotes = 1;
 			}
 			temp++;
 		}
@@ -308,11 +273,30 @@ char **parse_args(char *line) {
 		strstart++;
 	  } else {
 		// If not, just proceed to copy line 
-	    strsep(&strtemp," ");
+		// but check for escaped characters 
+	    char *temp = strsep(&strtemp," ");
+		if (temp != NULL) {
+			char lastquotes = 1;
+			while (*temp) {
+				if (*temp == '\\' && lastquotes) {
+					printf("Test: temp: '%c' temp+1: '%c' temp+2: '%c' \n",temp[0],temp[1],temp[2]);
+					char *temp2;
+					for (temp2 = temp; temp2 > strstart; temp2--) {
+						*temp2 = *(temp2 - 1);
+					}
+					strstart++;
+					lastquotes = 0;
+				} else {
+					lastquotes = 1;
+				}
+				temp++;
+			}
+		}
 	  }
 	  // If last token of line, find type of quote and strrchr it, remove them and keep spaces  
     } else {
 	  // If quotes are in string 
+	  // PARSE ESCAPE CHARACTERS IN THIS 
 	  if (quote != NULL) {
 		char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
 		char *temp = quote;
@@ -332,116 +316,4 @@ char **parse_args(char *line) {
   liststr = realloc(liststr,(i+1)*8);
   liststr[i] = NULL;
   return liststr;
-}
-
-/* 
-  Determines whether a character within a string is in quotes (single or double) 
-  String points to a null-terminated string of characters, ptinstring is a pointer to a char within that string
-  Returns 1 / 0 (True / False)
-*/
-int inquotes(char *string, char *ptinstring) {
-  int qlvl = 0;
-  char qtype = 0;
-  char *p = string;
-  char *temp = strchr(string,'\'');
-  // If neither ' or " in string return 0
-  if (temp == NULL || temp > ptinstring) {
-    temp = strchr(string,'"');
-    if (temp == NULL || temp > ptinstring) {
-      return 0;
-    }
-  }	
-  /*printf("string: '%s'\n",string); */
-  while (p < ptinstring && p != NULL) {
-    char *q = min(strchr(p,'\''),strchr(p,'"'));
-    if (q == NULL || q >= ptinstring) {break;}
-    if (qlvl == 0) {
-	  // If is first byte of string or last byte is not backslash
-      if (q == string || *(q-1) != '\\') {
-	    qtype = *q;
-	    qlvl = 1;
-      }
-    } else {
-	  // If match ' vs " and is first byte or does not proceed a backslash
-      if (*q == qtype && (q == string || *(q-1) != '\\')) {
-	    qlvl = 0;
-      }
-    }
-    p = q + 1;
-    //printf("qlvl: %d\n",qlvl);
-	
-  }
-  return qlvl;
-}
-
-/* 
-  Finds needle in haystack and returns a new string where it has been replaced by toreplace
-  Returns a pointer to a new string, NULL if needle was not found.
-  Caller should free() the old string
-*/
-char *replace_string(char *haystack, char *needle, char *toreplace) {
-  //printf("'%s' '%s' '%s'\n",haystack,needle,toreplace);
-  char *tmpchr, *tmpndl, *lpchr;
-  tmpchr = haystack;
-  while (*tmpchr) {
-    lpchr = tmpchr;
-    tmpndl = needle;
-	
-	// while letters of haystack and needle match
-    while (*lpchr == *tmpndl) {
-      lpchr++;
-      tmpndl++;
-	  // if end of needle (success), break
-      if (!(*tmpndl)) {
-	    break;
-      }
-	  // if end of string reached, return null
-      if (!(*lpchr)) {
-	    return NULL;
-      }
-    }
-	// if end of while loop was because end of needle, break
-    if (!(*tmpndl)) {
-      break;
-    }
-    tmpchr++;
-  }
-  // if end of string was reached return NULL
-  if (tmpchr - haystack >= strlen(haystack)) {
-    return NULL;
-  }
-  char *half2, *new;
-  int sizehalf1, sizehalf2, sizenew;
-  // Calculate sizes of string before and after matching part
-  sizehalf1 = tmpchr - haystack;
-  sizehalf2 = strlen(haystack) - (tmpchr - haystack) - strlen(needle);
-  // calc size of new string 
-  sizenew = sizehalf1 + sizehalf2 + strlen(toreplace);
-  //printf("sizehalf1: %d sizehalf2: %d sizenew: %d\n",sizehalf1,sizehalf2,sizenew);
-  new = malloc(sizenew+1);
-  // Copy half before, what to replace, and half after 
-  memcpy(new,haystack,sizehalf1);
-  memcpy(new+sizehalf1,toreplace,strlen(toreplace));
-  memcpy(new+sizehalf1+strlen(toreplace),tmpchr+strlen(needle),sizehalf2);
-  // Null-terminate string 
-  //printf("sizehalf1: %d strlen(toreplace): %d sizehalf2: %d\n",sizehalf1,strlen(toreplace),sizehalf2);
-  *(new+sizehalf1+strlen(toreplace)+sizehalf2) = '\0';
-  //printf("Haystack: '%s'\nNew: '%s'\n",haystack,new);
-  return new;
-}
-
-/* 
-  Returns the minimum of two pointers unless one is null, then return the other 
-  (if both are null, returns null)
-  a and b are (possibly null) pointers
-*/
-void *min(void *a, void *b) {
-	//return (a == NULL) ? b : ((b == NULL) ? a : (a < b ? a : b));
-	if (a == NULL) {
-	  return b;	
-	} else if (b == NULL) {
-	  return a;	
-	} else {
-	  return a < b ? a : b;	
-	}
 }
