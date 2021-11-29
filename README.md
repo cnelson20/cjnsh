@@ -13,7 +13,7 @@ My shell for the class Systems Level Programming
 
 ### Bugs 
 
-- Will seg fault if any token is \\' or \\"
+- Will seg fault if any token is `\\'` or `\\"`
 - User entering token as \\\\ does not process into one backslash
 
 ## Function List
