@@ -11,7 +11,7 @@ My shell for the class Systems Level Programming
 
 - user, directory printout at prompt
 
-### Bugs 
+## Bugs 
 
 - User entering token as exactly `\\` does not process into one backslash (stays as two)
 
