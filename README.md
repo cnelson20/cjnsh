@@ -14,7 +14,7 @@ My shell for the class Systems Level Programming
 ### Bugs 
 
 - ~~Will seg fault if any token is `\'` or `\"` (by itself)~~
-- ~~User entering token as exactly `\\` does not process into one backslash (stays as two)~~
+- User entering token as exactly `\\` does not process into one backslash (stays as two)
 
 ## Function List
 
