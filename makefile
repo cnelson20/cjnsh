@@ -3,7 +3,7 @@ all: cjnsh
 cjnsh: main.o
 	gcc main.o -o cjnsh
 
-main.o: main.c
+main.o: main.c main.h
 	gcc -c main.c
 
 run:
