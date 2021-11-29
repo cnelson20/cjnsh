@@ -3,15 +3,18 @@ My shell for the class Systems Level Programming
 
 ## Features
 - Semicolon parsing
-- Quote handling (and within them newlines)
+- Quote handling 
+- Ability to escape quotes / other backslashes 
 - Replacement of ~ with home directory 
 - Pipe
 - Redirection to, from files
 
 - user, directory printout at prompt
 
-## To Do
-- Removing the backslash from escaped characters
+### Bugs 
+
+- Will seg fault if any token is \' or \"
+- User entering token as \\ does not process into one backslash
 
 ## Function List
 
