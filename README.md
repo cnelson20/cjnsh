@@ -38,7 +38,7 @@ void escapecharacters(char **stringpointer, char quotes);
 void *max(void *a, void *b);
 char **getstringargs(struct token_struct **listargs);
 
-/* custom struct (in main.h): */
+/* custom struct (for reference): */
 struct token_struct {
         char *s;
         int q;
