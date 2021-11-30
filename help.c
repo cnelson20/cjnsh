@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "main.h"
 #include "help.h"
 
 /*
@@ -10,12 +11,12 @@
   Each string is enclosed with quotes
   Returned value should be passed into free()
 */
-char *join(char **liststrings) {
+char *join(struct token_struct **liststrings) {
 	int i, totalstringlength;
 	totalstringlength = 0;
 	// Calculate total length of string by mallocing it.
 	for (i = 0; liststrings[i] != NULL; i++) {
-		char *j = liststrings[i];
+		char *j = liststrings[i]->s;
 		if (i != 0) {totalstringlength++;} // space inbetween strings
 		totalstringlength += 2; // begin & end "
 		while (*j) {
@@ -27,7 +28,7 @@ char *join(char **liststrings) {
 	// Combine strings in joined
 	char *tcp = joined;
 	for (i = 0; liststrings[i] != NULL; i++) {
-		char *j = liststrings[i];
+		char *j = liststrings[i]->s;
 		if (i != 0) {*tcp = ' '; tcp++;} // space inbetween strings
 		*tcp = '"'; tcp++;
 		while (*j) {
@@ -201,3 +202,18 @@ void escapecharacters(char **stringpointer, char quotes) {
 	}
 	/*printf("output: '%s'\n",*stringpointer);*/
 }	
+
+/* 
+	Takes an array of struct token_struct pointers and returns an array of each token_struct's string.
+	listargs is a array of pointers to token_struct structs. 
+*/
+char **getstringargs(struct token_struct **listargs) {
+	int i;
+	for (i = 1; listargs[i]; i++);
+	char **liststrings = malloc(sizeof(char *) * i);
+	for (i = 0; listargs[i]; i++) {
+		liststrings[i] = listargs[i]->s;
+	}
+	liststrings[i] = NULL;
+	return liststrings;
+}

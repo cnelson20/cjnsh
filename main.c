@@ -87,9 +87,10 @@ int main() {
 */
 int execline(char *line) {
 	int childstatus;
-	char **listargs = parse_args(line);
-    if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0],"cd")) {
-	  if (chdir(listargs[1]) == 0) {
+	struct token_struct **listargs = parse_args(line);
+
+    if (listargs[0] != NULL && listargs[1] != NULL && !strcmp(listargs[0]->s,"cd")) {
+	  if (chdir(listargs[1]->s) == 0) {
 		free(cwd);
 	    cwd = getcwd(NULL,0);
 		char *tmp = replace_string(cwd,homedir,"~");
@@ -98,20 +99,22 @@ int execline(char *line) {
 		  cwd = tmp;
 		}
 	  } else {
-		printf("-cjnsh: %s: %s: %s\n",listargs[0],listargs[1],strerror(errno));	
+		printf("-cjnsh: %s: %s: %s\n",listargs[0]->s,listargs[1]->s,strerror(errno));	
 	  }
-    } else if (listargs[0] != NULL && !strcmp(listargs[0],"exit")) {
-	  if (listargs[1] == NULL) {
+    } else if (listargs[0] != NULL && !strcmp(listargs[0]->s,"exit")) {
+	  if (listargs[1]->s == NULL) {
 		exit(0);
 	  }
 	  int i;
-	  sscanf(listargs[1],"%d",&i);
+	  sscanf(listargs[1]->s,"%d",&i);
 	  exit(i);
     } else if (listargs[0] != NULL) {
 		int i = 0;
 		while (listargs[i]) {i++;}
 		i--;
-		if (!strcmp(listargs[i],"&")) {
+		if (!strcmp(listargs[i]->s,"&")) {
+			free(listargs[i]->s);
+			free(listargs[i]);
 			listargs[i] = NULL;
 			i = 0;
 		} else { i = 1; }
@@ -124,6 +127,7 @@ int execline(char *line) {
     }
 	int i = 0;
 	while (listargs[i]) {
+	  if (listargs[i]->s) {free(listargs[i]->s);}
 	  free(listargs[i]);
 	  i++;
 	}
@@ -138,77 +142,81 @@ int execline(char *line) {
   Returns the return value of the last program run
 */
 // Note: only handles one pipe per command, though guidelines say that's fine
-int do_pipes(char **listargs) {	
+int do_pipes(struct token_struct **listargs) {	
 	int rval;
 	int length; 
 	for (length = 0; listargs[length] != NULL; length++);
 	int i;
 	for (i = length - 2; i >= 1; i--) {
-		if (!strcmp(listargs[i],">") || !strcmp(listargs[i],">>")) {
-			int redirectto = open(listargs[i+1],O_WRONLY | O_CREAT | (strlen(listargs[i]) >= 2 ? O_APPEND : O_TRUNC),0755);
-			if (errno) {
-				printf("-cjnsh: %s: %s\n",listargs[i+1],strerror(errno));
-			} else {
-				int fd_copystdout = dup(STDOUT_FILENO);	
-				// Append if strlen >= 2 (>>)
-				dup2(redirectto,STDOUT_FILENO);
-				char *temppointer = listargs[i];
+		if (!listargs[i]->q) {
+			if (!strcmp(listargs[i]->s,">") || !strcmp(listargs[i]->s,">>")) {
+				int redirectto = open(listargs[i+1]->s,O_WRONLY | O_CREAT | (strlen(listargs[i]->s) >= 2 ? O_APPEND : O_TRUNC),0755);
+				if (errno) {
+					printf("-cjnsh: %s: %s\n",listargs[i+1]->s,strerror(errno));
+				} else {
+					int fd_copystdout = dup(STDOUT_FILENO);	
+					// Append if strlen >= 2 (>>)
+					dup2(redirectto,STDOUT_FILENO);
+					struct token_struct *temppointer = listargs[i];
+					listargs[i] = NULL;
+					
+					do_pipes(listargs);
+					
+					listargs[i] = temppointer;
+					dup2(fd_copystdout,STDOUT_FILENO);
+					close(fd_copystdout);
+					close(redirectto);
+				}
+			} else if (!strcmp(listargs[i]->s,"<")) {
+				int redirectfrom = open(listargs[i+1]->s,O_RDONLY);
+				if (errno) {
+					printf("-cjnsh: %s: %s\n",listargs[i+1]->s,strerror(errno));
+				} else {
+					int fd_copystdin = dup(STDIN_FILENO);	
+					dup2(redirectfrom,STDIN_FILENO);
+					struct token_struct *temppointer = listargs[i];
+					listargs[i] = NULL;
+					
+					do_pipes(listargs);
+					
+					listargs[i] = temppointer;
+					dup2(fd_copystdin,STDIN_FILENO);
+					close(fd_copystdin);
+					close(redirectfrom);
+				}
+			} else if (!strcmp(listargs[i]->s,"|")) {
+				char *joined1, *joined2;
+				joined1 = join(&(listargs[i+1]));
+				
+				struct token_struct *temp = listargs[i];
 				listargs[i] = NULL;
-				
-				do_pipes(listargs);
-				
-				listargs[i] = temppointer;
-				dup2(fd_copystdout,STDOUT_FILENO);
-				close(fd_copystdout);
-				close(redirectto);
-			}
-		} else if (!strcmp(listargs[i],"<")) {
-			int redirectfrom = open(listargs[i+1],O_RDONLY);
-			if (errno) {
-				printf("-cjnsh: %s: %s\n",listargs[i+1],strerror(errno));
-			} else {
-				int fd_copystdin = dup(STDIN_FILENO);	
-				dup2(redirectfrom,STDIN_FILENO);
-				char *temppointer = listargs[i];
-				listargs[i] = NULL;
-				
-				do_pipes(listargs);
-				
-				listargs[i] = temppointer;
-				dup2(fd_copystdin,STDIN_FILENO);
-				close(fd_copystdin);
-				close(redirectfrom);
-			}
-		} else if (!strcmp(listargs[i],"|")) {
-			char *joined1, *joined2;
-			joined1 = join(&(listargs[i+1]));
-			
-			char *temp = listargs[i];
-			listargs[i] = NULL;
-			joined2 = join(listargs);
+				joined2 = join(listargs);
 
-			listargs[i] = temp;
-			FILE *pipefrom = popen(joined2,"r");
-			FILE *pipeto = popen(joined1,"w");
-			while (1) {
-				if (feof(pipefrom)) {break;}
-				fputc(fgetc(pipefrom),pipeto);
+				listargs[i] = temp;
+				FILE *pipefrom = popen(joined2,"r");
+				FILE *pipeto = popen(joined1,"w");
+				while (1) {
+					if (feof(pipefrom)) {break;}
+					fputc(fgetc(pipefrom),pipeto);
+				}
+				//if (pclose(pipefrom) == -1) {
+				//	printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[0],strerror(errno));
+				//}
+				int rval = pclose(pipeto);
+				if (rval == -1) {
+					printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[i+1],strerror(errno));
+				}
+				
+				free(joined1);
+				free(joined2);
+				return(rval);
 			}
-			//if (pclose(pipefrom) == -1) {
-			//	printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[0],strerror(errno));
-			//}
-			int rval = pclose(pipeto);
-			if (rval == -1) {
-				printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[i+1],strerror(errno));
-			}
-			
-			free(joined1);
-			free(joined2);
-			return(rval);
 		}
 	}
-	errno = 0;
-	rval = execvp(listargs[0],listargs);
+	errno = 0;		
+	char **strargs = getstringargs(listargs);
+	rval = execvp(strargs[0],strargs);
+	free(strargs);
 	if (errno) {
 		printf("-cjnsh: %s: %s\n",listargs[0],strerror(errno));
 	}
@@ -224,7 +232,7 @@ int do_pipes(char **listargs) {
   Each element of the returned array should be passed into free(), and the array should be as well
 */
 // Note: Escaped characters in the last arg of a command arent parsed ,except for quotes 
-char **parse_args(char *line) {
+struct token_struct **parse_args(char *line) {
 	char *strtemp;
 	char *ogline = line;
  
@@ -246,7 +254,8 @@ char **parse_args(char *line) {
 	// Split line into args 
 	strtemp = line;
 	char *strend = strchr(line,'\0');
-	char **liststr;
+	struct token_struct **liststr;
+	char qtype = '\0';
 	liststr = malloc(0);
 		
 	int i = 0;
@@ -260,7 +269,7 @@ char **parse_args(char *line) {
 		if (strchr(strtemp,' ') != NULL) {	  
 			//If line has space, check whether the next quote is before the space
 				if (quote != NULL && quote < strchr(strstart,' ')) {
-					char qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
+					qtype = (quote == strchr(strstart,'\'')) ? '\'' : '"';
 					char *temp = quote;
 					char lastquotes = 1; // boolean for backslash check  
 					while (*(temp+1) != qtype || *temp == '\\') {
@@ -291,7 +300,7 @@ char **parse_args(char *line) {
 		} else {
 		  char *qpos = max(strrchr(strstart,'\''),strrchr(strstart,'"'));
 		  if (qpos && (qpos == strstart || *(qpos-1) != '\\')) {
-			char qtype = *qpos;
+			qtype = *qpos;
 			strstart = strchr(strstart,qtype)+1;
 			*strrchr(strstart,qtype) = '\0';
 			escapecharacters(&strstart,1);
@@ -303,8 +312,11 @@ char **parse_args(char *line) {
 		if (strlen(strstart)) {
 		  // Reallocate memory, then copy string 
 		  liststr = realloc(liststr,(i+1)*8);
-		  liststr[i] = malloc(strlen(strstart) + 1);
-		  strcpy(liststr[i],strstart); 
+		  liststr[i] = malloc(sizeof (struct token_struct));
+		  liststr[i]->s = malloc(strlen(strstart) + 1);
+		  liststr[i]->q = qtype;
+		  strcpy(liststr[i]->s,strstart); 
+		    
 		  i++;	  
 		}
 	}
