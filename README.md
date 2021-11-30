@@ -14,7 +14,7 @@ My shell for the class Systems Level Programming
 ## Bugs / Issues
 
 - Pipes & redirects must be their own token
-- User entering token as `"\\"` or `'\\'` does not process correctly (quotes stay)
+- User entering token as `"\\"` or `'\\'` (any even number of backslashes > 0) does not process correctly (quotes stay)
 
 - Control-C does terminate the program (Not really a bug just wanted to note this)
 
