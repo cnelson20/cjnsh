@@ -4,6 +4,7 @@ My shell for the class Systems Level Programming
 ## Features
 - Semicolon parsing
 - Quote handling 
+- Special characters (~, |, >, >>, <) are not parsed when in quotes
 - Ability to escape characters
 - Replacement of ~ with home directory 
 - Pipe
@@ -16,7 +17,7 @@ My shell for the class Systems Level Programming
 - Pipes & redirects must be their own token
 - User entering token as `"\\"` or `'\\'` (any even number of backslashes > 0) does not process correctly (quotes stay)
 
-- Control-C does terminate the program (Not really a bug just wanted to note this)
+- Control-C does terminate the program (Not a bug just want to note this)
 
 ## Function List
 
