@@ -4,7 +4,7 @@ My shell for the class Systems Level Programming
 ## Features
 - Semicolon parsing
 - Quote handling 
-- Ability to escape quotes / other backslashes 
+- Ability to escape characters
 - Replacement of ~ with home directory 
 - Pipe
 - Redirection to, from files
@@ -14,7 +14,7 @@ My shell for the class Systems Level Programming
 ## Bugs / Issues
 
 - Pipes & redirects must be their own token
-- User entering token as exactly `\\` does not process into one backslash (stays as two)
+- User entering token as `"\\"` or `'\\'` does not process into one backslash (stays as two)
 
 - Control-C does terminate the program (Not really a bug just wanted to note this)
 
