@@ -16,6 +16,8 @@ My shell for the class Systems Level Programming
 - Pipes & redirects must be their own token
 - User entering token as exactly `\\` does not process into one backslash (stays as two)
 
+- Control-C does terminate the program (Not really a bug just wanted to note this)
+
 ## Function List
 
 ```c
