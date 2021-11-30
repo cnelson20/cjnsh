@@ -181,7 +181,8 @@ void *max(void *a, void *b) {
   quotes is a boolean on whether the characters escapeable should be limited 
 */
 void escapecharacters(char **stringpointer, char quotes) {
-	//printf("escapecharacters()\n");
+	/*printf("escapecharacters():\n");
+	printf("input: '%s'\n",*stringpointer);*/
 	char lastquotes = 1;
 	char *temp = *stringpointer;
 	while (*temp) {
@@ -198,4 +199,5 @@ void escapecharacters(char **stringpointer, char quotes) {
 		//printf("test\n");
 		temp++;
 	}
+	/*printf("output: '%s'\n",*stringpointer);*/
 }	

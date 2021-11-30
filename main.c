@@ -295,6 +295,8 @@ char **parse_args(char *line) {
 			strstart = strchr(strstart,qtype)+1;
 			*strrchr(strstart,qtype) = '\0';
 			escapecharacters(&strstart,1);
+		  } else {
+			escapecharacters(&strstart,0);
 		  }
 		  strtemp = strend;
 		} 
