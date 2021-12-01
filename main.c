@@ -127,7 +127,7 @@ int execline(char *line) {
     }
 	int i = 0;
 	while (listargs[i]) {
-	  if (listargs[i]->s) {free(listargs[i]->s);}
+	  free(listargs[i]->s);
 	  free(listargs[i]);
 	  i++;
 	}
@@ -143,7 +143,6 @@ int execline(char *line) {
 */
 // Note: only handles one pipe per command, though guidelines say that's fine
 int do_pipes(struct token_struct **listargs) {	
-	int rval;
 	int length; 
 	for (length = 0; listargs[length] != NULL; length++);
 	int i;
@@ -204,7 +203,7 @@ int do_pipes(struct token_struct **listargs) {
 				//}
 				int rval = pclose(pipeto);
 				if (rval == -1) {
-					printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[i+1],strerror(errno));
+					printf("-cjnsh: %s: %s (Did you type something wrong?)\n",listargs[i+1]->s,strerror(errno));
 				}
 				
 				free(joined1);
@@ -215,12 +214,14 @@ int do_pipes(struct token_struct **listargs) {
 	}
 	errno = 0;		
 	char **strargs = getstringargs(listargs);
-	rval = execvp(strargs[0],strargs);
-	free(strargs);
-	if (errno) {
-		printf("-cjnsh: %s: %s\n",listargs[0],strerror(errno));
+	if (execvp(strargs[0],strargs) == -1) {
+		printf("-cjnsh exec: %s: %s\n",strargs[0],strerror(errno));
 	}
-	return rval;
+	for (i = 0; strargs[i] != NULL; i++) {
+		free(strargs[i]);
+	}
+	free(strargs);
+	return 0;
 }
 
 

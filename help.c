@@ -206,13 +206,15 @@ void escapecharacters(char **stringpointer, char quotes) {
 /* 
 	Takes an array of struct token_struct pointers and returns an array of each token_struct's string.
 	listargs is a array of pointers to token_struct structs. 
+	New strings should be free'd. (Only copying the pointers seemed to cause problems)
 */
 char **getstringargs(struct token_struct **listargs) {
 	int i;
 	for (i = 1; listargs[i]; i++);
 	char **liststrings = malloc(sizeof(char *) * i);
 	for (i = 0; listargs[i]; i++) {
-		liststrings[i] = listargs[i]->s;
+		liststrings[i] = malloc(strlen(listargs[i]->s)+1); 
+		strcpy(liststrings[i],listargs[i]->s);
 	}
 	liststrings[i] = NULL;
 	return liststrings;
