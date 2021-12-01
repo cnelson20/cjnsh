@@ -14,9 +14,10 @@ My shell for the class Systems Level Programming
 
 ## Bugs / Issues
 
-- Pipes & redirects must be their own token
 - User entering token as `"\\"` or `'\\'` (any even number of backslashes > 0) does not process correctly (quotes stay)
+- ~~Typing a command with two tokens causes future commands with >= 3 tokens to make execvp throw a 'Bad Address' error~~ (I'm pretty sure this is fixed, it had some really weird behavior so perhaps not?)
 
+- Pipes & redirects must be their own token
 - Control-C does terminate the program (Not a bug just want to note this)
 
 ## Function List
